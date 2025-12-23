@@ -1,6 +1,15 @@
 ## 🚀 Backend API
 
 The server is built with **Node.js** and **Express**. It handles authentication, business details, services, and appointments.
+The server is deployed online and accessible at: https://businessmeet.onrender.com
+
+
+### 💻 Frontend Client
+The server works together with a React-based client application that handles the user interface, admin panel, and interactions with the API.  
+- Admins can edit business details, manage services, and view/manage appointments.  
+- Regular users can view services and schedule appointments.  
+
+> The client is hosted separately and communicates with this backend API.
 
 ### 📌 API Endpoints
 
