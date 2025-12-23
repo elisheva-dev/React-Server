@@ -13,7 +13,7 @@ The server is built with **Node.js** and **Express**. It handles authentication,
   "name": "admin",
   "password": "123456"
 }
-
+```
 ### 🔑 Authentication
 
 **Login Endpoint**
