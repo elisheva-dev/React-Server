@@ -72,7 +72,13 @@ app.get("/services", (req, res) => {
 });
 
 
-let businessData ={};
+let businessData ={
+  "name": "Respira",
+  "address": "Yafo - Jerusalem",
+  "phone": "02-6442222",
+  "owners": "owners: 45921",
+  "logo": "/images/logo.png"
+};
 
 app.post("/businessData", (req, res) => {
     const body = req.body;
