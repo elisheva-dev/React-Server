@@ -142,6 +142,31 @@ app.post("/businessData", async (req, res) => {
     }
 });
 
+// replace/fully-update business data (PUT)
+app.put("/businessData", async (req, res) => {
+    const { name, address, phone, owners, logo } = req.body;
+    try {
+        // ensure row exists
+        const cur = await pool.query("SELECT * FROM business_data WHERE id=1");
+        if (cur.rowCount === 0) {
+            const insert = await pool.query(
+                `INSERT INTO business_data (id, name, address, phone, owners, logo) VALUES (1, $1, $2, $3, $4, $5) RETURNING *`,
+                [name || null, address || null, phone || null, owners || null, logo || null]
+            );
+            return res.status(200).json(insert.rows[0]);
+        }
+        // For PUT we expect full replacement; missing fields will be set to NULL
+        const result = await pool.query(
+            `UPDATE business_data SET name=$1, address=$2, phone=$3, owners=$4, logo=$5 WHERE id=1 RETURNING *`,
+            [name || null, address || null, phone || null, owners || null, logo || null]
+        );
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
+
 app.get("/businessData", async (req, res) => {
     try {
         const result = await pool.query("SELECT * FROM business_data WHERE id=1");
