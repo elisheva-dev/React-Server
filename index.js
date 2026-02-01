@@ -1,92 +1,153 @@
 import express from "express";
-import bodyParser from "body-parser";
 import cors from "cors";
+import dotenv from "dotenv";
+import { Pool } from "pg";
+
+dotenv.config();
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(cors());
 
-// app.listen(8787, () => {
-//     console.log("Server started!");
-// });
+// PostgreSQL connection
+const connectionString = process.env.DATABASE_URL || "";
+const pool = new Pool({
+    connectionString,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
-const PORT = process.env.PORT || 8787; 
+// create tables on startup
+async function initDb() {
+    await pool.query(`CREATE TABLE IF NOT EXISTS services (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        data JSONB
+    );`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS appointments (
+        id SERIAL PRIMARY KEY,
+        datetime TEXT UNIQUE NOT NULL,
+        info JSONB
+    );`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS business_data (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        name TEXT,
+        address TEXT,
+        phone TEXT,
+        owners TEXT,
+        logo TEXT
+    );`);
+
+    const res = await pool.query("SELECT COUNT(*) FROM business_data");
+    if (parseInt(res.rows[0].count) === 0) {
+        await pool.query(
+            `INSERT INTO business_data (id, name, address, phone, owners, logo)
+             VALUES (1, $1, $2, $3, $4, $5)`,
+            ["Respira", "Yafo - Jerusalem", "02-6442222", "owners: 45921", "/images/logo.png"]
+        );
+    }
+}
+
+initDb().then(() => console.log("DB initialized")).catch(err => console.error("DB init error:", err));
+
+const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
     console.log(`Server started on port ${PORT}`);
 });
 
 app.get("/", (req, res) => {
     res.send("Hello World!");
-}
-);
+});
 
-//add get request that check if the request body has name = "admin" and password = 123456
-//path: localhost:8787/login
+// login (unchanged)
 app.post("/login", (req, res) => {
     const body = req.body;
     if (body.name === "admin" && body.password === "123456") {
         res.status(200).send("Login success!");
     } else {
-     res.status(401).send("Login failed!");
+        res.status(401).send("Login failed!");
     }
 });
 
-// add post request that add new appointment to the appointments array and check in the array if the time is available or not
-const appointments = [];
-
-app.post("/appointment", (req, res) => {
-    const body = req.body;
-
-    const isTaken = appointments.some(
-        (appointment) => appointment.dateTime === body.dateTime
-    );
-
-    if (!isTaken) {
-        appointments.push(body);
-        res.status(200).send("Appointment added successfully!");
-    } else 
-        res.status(400).send("Appointment is not available!");
-});
-
-
-// add get request that return all appointments
-app.get("/appointments", (req, res) => {
-    res.send(appointments);
-});
-let services = [];
-let nextId = 1;
-
-app.post("/service", (req, res) => {
-    const serviceExists = services.some(service => service.name === req.body.name);
-    if (serviceExists) {
-        res.status(400).send("Service already exists!");
-        return;
+// appointments
+app.post("/appointment", async (req, res) => {
+    const { dateTime, ...rest } = req.body;
+    try {
+        const exists = await pool.query("SELECT 1 FROM appointments WHERE datetime = $1", [dateTime]);
+        if (exists.rowCount > 0) {
+            return res.status(400).send("Appointment is not available!");
+        }
+        const result = await pool.query(
+            "INSERT INTO appointments (datetime, info) VALUES ($1, $2) RETURNING *",
+            [dateTime, rest]
+        );
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
     }
-    const newService = { id: nextId++, ...req.body };
-    services.push(newService);
-    res.status(200).json(newService); // מחזיר את האובייקט החדש
 });
 
-app.get("/services", (req, res) => {
-    res.json(services);
+app.get("/appointments", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM appointments ORDER BY id");
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
 });
 
-
-let businessData ={
-  name: "Respira",
-  address: "Yafo - Jerusalem",
-  phone: "02-6442222",
-  owners: "owners: 45921",
-  logo: "/images/logo.png"
-};
-
-app.post("/businessData", (req, res) => {
-    const body = req.body;
-    businessData = body;
-    res.statusCode = 200;
-    res.send(businessData);
+// services
+app.post("/service", async (req, res) => {
+    const { name, ...rest } = req.body;
+    try {
+        const result = await pool.query(
+            "INSERT INTO services (name, data) VALUES ($1, $2) RETURNING *",
+            [name, rest]
+        );
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === "23505") { // unique_violation
+            return res.status(400).send("Service already exists!");
+        }
+        console.error(err);
+        res.status(500).send("Server error");
+    }
 });
 
-app.get("/businessData", (req, res) => {
-    res.send(businessData);
+app.get("/services", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT id, name, data FROM services ORDER BY id");
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
+
+// business data
+app.post("/businessData", async (req, res) => {
+    const { name, address, phone, owners, logo } = req.body;
+    try {
+        const result = await pool.query(
+            `UPDATE business_data SET name=$1, address=$2, phone=$3, owners=$4, logo=$5 WHERE id=1 RETURNING *`,
+            [name, address, phone, owners, logo]
+        );
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
+
+app.get("/businessData", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM business_data WHERE id=1");
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
 });
