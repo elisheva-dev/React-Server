@@ -22,6 +22,7 @@ npm install
 ```bash
 node index.js
 ```
+4. Or try the live server: https://businessmeet.onrender.com
 
 ## 📌 Features
 - RESTful API endpoints
